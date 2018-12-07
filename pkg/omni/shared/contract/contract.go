@@ -38,13 +38,36 @@ type Contract struct {
 	ParsedAbi      abi.ABI                      // Parsed abi
 	Events         map[string]types.Event       // Map of events to their names
 	Methods        map[string]types.Method      // Map of methods to their names
-	Filters        map[string]filters.LogFilter // Map of event filters to their names
-	EventAddrs     map[string]bool              // User-input list of account addresses to watch events for
-	MethodAddrs    map[string]bool              // User-input list of account addresses to poll methods for
-	TknHolderAddrs map[string]bool              // List of all contract-associated addresses, populated as events are transformed
+	Filters        map[string]filters.LogFilter // Map of event filters to their names; used only for full sync watcher
+	FilterArgs     map[string]bool              // User-input list of values to filter event logs for
+	MethodArgs     map[string]bool              // User-input list of values to limit method polling to
+	EmittedAddrs   map[string]bool              // List of all addresses collected from converted event logs
+	EmittedBytes   map[string]bool              // List of all bytes collected from converted event logs
+	EmittedHashes  map[string]bool              // List of all hashes collected from converted event logs
+	CreateAddrList bool 						// Whether or not to persist address list to postgres
 }
 
-// Use contract info to generate event filters
+// If we are watching events that emit addr, hash, or byte arrays
+// then we initialize map to hold the emitted values
+func (c Contract) Init() *Contract {
+	for _, event := range c.Events {
+		for _, field := range event.Fields {
+			switch field.Type.T {
+			case abi.AddressTy:
+				c.EmittedAddrs = map[string]bool{}
+			case abi.HashTy:
+				c.EmittedHashes = map[string]bool{}
+			case abi.BytesTy, abi.FixedBytesTy:
+				c.EmittedBytes = map[string]bool{}
+			default:
+			}
+		}
+	}
+
+	return &c
+}
+
+// Use contract info to generate event filters - full sync omni watcher only
 func (c *Contract) GenerateFilters() error {
 	c.Filters = map[string]filters.LogFilter{}
 
@@ -65,39 +88,39 @@ func (c *Contract) GenerateFilters() error {
 	return nil
 }
 
-// Returns true if address is in list of addresses to
+// Returns true if address is in list of arguments to
 // filter events for or if no filtering is specified
-func (c *Contract) IsEventAddr(addr string) bool {
-	if c.EventAddrs == nil {
+func (c *Contract) WantedEventArg(arg string) bool {
+	if c.FilterArgs == nil {
 		return false
-	} else if len(c.EventAddrs) == 0 {
+	} else if len(c.FilterArgs) == 0 {
 		return true
-	} else if a, ok := c.EventAddrs[addr]; ok {
+	} else if a, ok := c.FilterArgs[arg]; ok {
 		return a
 	}
 
 	return false
 }
 
-// Returns true if address is in list of addresses to
-// poll methods for or if no filtering is specified
-func (c *Contract) IsMethodAddr(addr string) bool {
-	if c.MethodAddrs == nil {
+// Returns true if address is in list of arguments to
+// poll methods with or if no filtering is specified
+func (c *Contract) WantedMethodArg(arg string) bool {
+	if c.MethodArgs == nil {
 		return false
-	} else if len(c.MethodAddrs) == 0 {
+	} else if len(c.MethodArgs) == 0 {
 		return true
-	} else if a, ok := c.MethodAddrs[addr]; ok {
+	} else if a, ok := c.MethodArgs[arg]; ok {
 		return a
 	}
 
 	return false
 }
 
-// Returns true if mapping value matches filtered for address or if not filter exists
+// Returns true if any mapping value matches filtered for address or if no filter exists
 // Used to check if an event log name-value mapping should be filtered or not
 func (c *Contract) PassesEventFilter(args map[string]string) bool {
 	for _, arg := range args {
-		if c.IsEventAddr(arg) {
+		if c.WantedEventArg(arg) {
 			return true
 		}
 	}
@@ -105,10 +128,31 @@ func (c *Contract) PassesEventFilter(args map[string]string) bool {
 	return false
 }
 
-// Used to add an address to the token holder address list
-// if it is on the method polling list or the filter is open
-func (c *Contract) AddTokenHolderAddress(addr string) {
-	if c.TknHolderAddrs != nil && c.IsMethodAddr(addr) {
-		c.TknHolderAddrs[addr] = true
+// Add event emitted address to our list if it passes filter and method polling is on
+func (c *Contract) AddEmittedAddr(addresses ...string) {
+	for _, addr := range addresses {
+		if c.WantedMethodArg(addr) && c.Methods != nil {
+			c.EmittedAddrs[addr] = true
+		}
 	}
 }
+
+// Add event emitted hash to our list if it passes filter and method polling is on
+func (c *Contract) AddEmittedHash(hashes ...string) {
+	for _, hash := range hashes {
+		if c.WantedMethodArg(hash) && c.Methods != nil {
+			c.EmittedHashes[hash] = true
+		}
+	}
+}
+
+
+// Add event emitted bytes to our list if it passes filter and method polling is on
+func (c *Contract) AddEmittedBytes(byteArrays ...string) {
+	for _, bytes := range byteArrays {
+		if c.WantedMethodArg(bytes) && c.Methods != nil {
+			c.EmittedBytes[bytes] = true
+		}
+	}
+}
+

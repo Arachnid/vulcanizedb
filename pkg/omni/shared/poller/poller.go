@@ -101,7 +101,7 @@ func (p *poller) pollNoArg(m types.Method) error {
 		result.Block = i
 
 		// Persist result immediately
-		err = p.PersistResult(result, p.contract.Address, p.contract.Name)
+		err = p.PersistResults([]types.Result{result}, m, p.contract.Address, p.contract.Name)
 		if err != nil {
 			return errors.New(fmt.Sprintf("poller error persisting 0 argument method result\r\nblock: %d, method: %s, contract: %s\r\nerr: %v", i, m.Name, p.contract.Address, err))
 		}
@@ -118,7 +118,7 @@ func (p *poller) pollSingleArg(m types.Method) error {
 		PgType: m.Return[0].PgType,
 	}
 
-	for addr := range p.contract.TknHolderAddrs {
+	for addr := range p.contract.EmittedAddrs {
 		for i := p.contract.StartingBlock; i <= p.contract.LastBlock; i++ {
 			hashArgs := []common.Address{common.HexToAddress(addr)}
 			in := make([]interface{}, len(hashArgs))
@@ -143,7 +143,7 @@ func (p *poller) pollSingleArg(m types.Method) error {
 			result.Block = i
 			result.Inputs = strIn
 
-			err = p.PersistResult(result, p.contract.Address, p.contract.Name)
+			err = p.PersistResults([]types.Result{result}, m, p.contract.Address, p.contract.Name)
 			if err != nil {
 				return errors.New(fmt.Sprintf("poller error persisting 1 argument method result\r\nblock: %d, method: %s, contract: %s\r\nerr: %v", i, m.Name, p.contract.Address, err))
 			}
@@ -162,8 +162,8 @@ func (p *poller) pollDoubleArg(m types.Method) error {
 		PgType: m.Return[0].PgType,
 	}
 
-	for addr1 := range p.contract.TknHolderAddrs {
-		for addr2 := range p.contract.TknHolderAddrs {
+	for addr1 := range p.contract.EmittedAddrs {
+		for addr2 := range p.contract.EmittedAddrs {
 			for i := p.contract.StartingBlock; i <= p.contract.LastBlock; i++ {
 				hashArgs := []common.Address{common.HexToAddress(addr1), common.HexToAddress(addr2)}
 				in := make([]interface{}, len(hashArgs))
@@ -188,7 +188,7 @@ func (p *poller) pollDoubleArg(m types.Method) error {
 				result.Block = i
 				result.Inputs = strIn
 
-				err = p.PersistResult(result, p.contract.Address, p.contract.Name)
+				err = p.PersistResults([]types.Result{result}, m, p.contract.Address, p.contract.Name)
 				if err != nil {
 					return errors.New(fmt.Sprintf("poller error persisting 2 argument method result\r\nblock: %d, method: %s, contract: %s\r\nerr: %v", i, m.Name, p.contract.Address, err))
 				}

@@ -142,7 +142,7 @@ func (r *eventRepository) persistLightSyncLogs(logs []types.Log, eventInfo types
 	}
 
 	eventId := strings.ToLower(eventInfo.Name + "_" + contractAddr)
-	err = repository.MarkHeaderCheckedInTransaction(logs[0].Id, tx, eventId)
+	err = repository.MarkHeaderCheckedInTransaction(logs[0].Id, tx, eventId) // This assumes all logs are from same block
 	if err != nil {
 		tx.Rollback()
 		return err

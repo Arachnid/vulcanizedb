@@ -67,6 +67,9 @@ func (c *converter) Convert(logs []gethTypes.Log, event types.Event, headerID in
 		}
 
 		strValues := make(map[string]string, len(values))
+		seenBytes := make([]string, 0, len(values))
+		seenAddrs := make([]string, 0, len(values))
+		seenHashes := make([]string, 0, len(values))
 		for fieldName, input := range values {
 			// Postgres cannot handle custom types, resolve everything to strings
 			switch input.(type) {
@@ -76,10 +79,11 @@ func (c *converter) Convert(logs []gethTypes.Log, event types.Event, headerID in
 			case common.Address:
 				a := input.(common.Address)
 				strValues[fieldName] = a.String()
-				c.ContractInfo.AddTokenHolderAddress(a.String()) // cache address in a list of contract's token holder addresses
+				seenAddrs = append(seenAddrs, a.String())
 			case common.Hash:
 				h := input.(common.Hash)
 				strValues[fieldName] = h.String()
+				seenHashes = append(seenHashes, h.String())
 			case string:
 				strValues[fieldName] = input.(string)
 			case bool:
@@ -87,6 +91,7 @@ func (c *converter) Convert(logs []gethTypes.Log, event types.Event, headerID in
 			case []byte:
 				b := input.([]byte)
 				strValues[fieldName] = string(b)
+				seenBytes = append(seenBytes, string(b))
 			case byte:
 				b := input.(byte)
 				strValues[fieldName] = string(b)
@@ -109,6 +114,17 @@ func (c *converter) Convert(logs []gethTypes.Log, event types.Event, headerID in
 				TransactionIndex: log.TxIndex,
 				Id:               headerID,
 			})
+
+			// Cache emitted values if their caching is turned on
+			if c.ContractInfo.EmittedAddrs != nil {
+				c.ContractInfo.AddEmittedAddr(seenAddrs...)
+			}
+			if c.ContractInfo.EmittedHashes != nil {
+				c.ContractInfo.AddEmittedHash(seenHashes...)
+			}
+			if c.ContractInfo.EmittedBytes != nil {
+				c.ContractInfo.AddEmittedBytes(seenBytes...)
+			}
 		}
 	}
 
